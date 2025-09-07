@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BIP39 DotMap - Visual Mnemonic Phrase Mapping</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'crypto-blue': '#1e40af',
+                        'crypto-purple': '#7c3aed',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Hide print content on screen */
+        .print-only {
+            display: none;
+        }
+        
+        @media print {
+            /* Hide all screen content */
+            body > *:not(#printContent) {
+                display: none !important;
+            }
+            
+            /* Show only print content */
+            .print-only {
+                display: block !important;
+            }
+            
+            /* Reset body styles for print */
+            body {
+                background: white !important;
+                margin: 0 !important;
+                padding: 0.1in !important;
+                font-family: 'Courier New', monospace !important;
+                font-size: 5px !important;
+                line-height: 1.0 !important;
+                color: black !important;
+            }
+            
+            /* Page break settings */
+            @page {
+                size: A4;
+                margin: 0;
+            }
+            
+            /* Print table styling */
+            #printTable {
+                width: 100% !important;
+                border-collapse: collapse !important;
+                table-layout: fixed !important;
+            }
+            
+            #printTable td {
+                padding: 0.5px 1px !important;
+                border: none !important;
+                vertical-align: top !important;
+                font-family: 'Courier New', monospace !important;
+                font-size: 5.8px !important;
+                line-height: 1.1 !important;
+                width: 14.28% !important; /* 100% / 7 columns */
+                overflow: hidden !important;
+                word-break: break-all !important;
+            }
+            
+            /* Force page break after 1024 words (approximately row 146 with 7 columns) */
+            #printTable tr:nth-child(147) {
+                page-break-before: always !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 to-blue-50 min-h-screen">
+    <!-- Header -->
+    <header class="bg-white shadow-lg border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-900">BIP39 DotMap</h1>
+                    <p class="text-gray-600 mt-1">Turn BIP39 words into visual dot patterns</p>
+                </div>
+                <div class="text-right">
+                    <div class="text-sm text-gray-500">12 dots represent:</div>
+                    <div class="text-xs text-gray-400 font-mono">2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1</div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Search and Filter Section -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <!-- Search Mode Toggle -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex items-center justify-center mb-6">
+                <div class="flex bg-gray-100 rounded-lg p-1">
+                    <button id="wordSearchMode" class="px-4 py-2 rounded-md text-sm font-medium transition-colors bg-crypto-blue text-white">
+                        Word Search
+                    </button>
+                    <button id="dotSearchMode" class="px-4 py-2 rounded-md text-sm font-medium transition-colors text-gray-600 hover:text-gray-900">
+                        Dot Pattern Search
+                    </button>
+                </div>
+            </div>
+
+            <!-- Word Search Panel -->
+            <div id="wordSearchPanel" class="search-panel">
+                <div class="flex flex-col sm:flex-row gap-4">
+                    <div class="flex-1">
+                        <label for="search" class="block text-sm font-medium text-gray-700 mb-2">Search Words</label>
+                        <input type="text" id="search" placeholder="Search BIP39 words..." 
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-crypto-blue focus:border-transparent">
+                    </div>
+                    <div class="sm:w-48">
+                        <label for="indexFilter" class="block text-sm font-medium text-gray-700 mb-2">Filter by Index</label>
+                        <select id="indexFilter" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-crypto-blue">
+                            <option value="">All Words</option>
+                            <option value="1-256">1-256</option>
+                            <option value="257-512">257-512</option>
+                            <option value="513-768">513-768</option>
+                            <option value="769-1024">769-1024</option>
+                            <option value="1025-1280">1025-1280</option>
+                            <option value="1281-1536">1281-1536</option>
+                            <option value="1537-1792">1537-1792</option>
+                            <option value="1793-2048">1793-2048</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dot Pattern Search Panel -->
+            <div id="dotSearchPanel" class="search-panel hidden">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Build Dot Pattern</label>
+                        <p class="text-xs text-gray-500 mb-4">Click dots to toggle between filled (●) and empty (○). Shows the exact word matching the pattern.</p>
+                        
+                        <div class="flex flex-col sm:flex-row gap-4 items-start">
+                            <div class="space-y-2">
+                                <div class="text-xs text-gray-500 text-center">Column 1 (2048-256)</div>
+                                <div class="flex space-x-1 bg-gray-50 p-3 rounded-lg" id="col1Builder">
+                                    <button class="dot-button w-6 h-6 rounded-full bg-gray-300 hover:bg-gray-400 transition-colors" data-col="1" data-pos="0"></button>
+                                    <button class="dot-button w-6 h-6 rounded-full bg-gray-300 hover:bg-gray-400 transition-colors" data-col="1" data-pos="1"></button>
+                                    <button class="dot-button w-6 h-6 rounded-full bg-gray-300 hover:bg-gray-400 transition-colors" data-col="1" data-pos="2"></button>
+                                    <button class="dot-button w-6 h-6 rounded-full bg-gray-300 hover:bg-gray-400 transition-colors" data-col="1" data-pos="3"></button>
+                                </div>
+                            </div>
+                            
+                            <div class="space-y-2">
+                                <div class="text-xs text-gray-500 text-center">Column 2 (128-8)</div>
+                                <div class="flex space-x-1 bg-gray-50 p-3 rounded-lg" id="col2Builder">
+                                    <button class="dot-button w-6 h-6 rounded-full bg-gray-300 hover:bg-gray-400 transition-colors" data-col="2" data-pos="0"></button>
+                                    <button class="dot-button w-6 h-6 rounded-full bg-gray-300 hover:bg-gray-400 transition-colors" data-col="2" data-pos="1"></button>
+                                    <button class="dot-button w-6 h-6 rounded-full bg-gray-300 hover:bg-gray-400 transition-colors" data-col="2" data-pos="2"></button>
+                                    <button class="dot-button w-6 h-6 rounded-full bg-gray-300 hover:bg-gray-400 transition-colors" data-col="2" data-pos="3"></button>
+                                </div>
+                            </div>
+                            
+                            <div class="space-y-2">
+                                <div class="text-xs text-gray-500 text-center">Column 3 (4-1)</div>
+                                <div class="flex space-x-1 bg-gray-50 p-3 rounded-lg" id="col3Builder">
+                                    <button class="dot-button w-6 h-6 rounded-full bg-gray-300 hover:bg-gray-400 transition-colors" data-col="3" data-pos="0"></button>
+                                    <button class="dot-button w-6 h-6 rounded-full bg-gray-300 hover:bg-gray-400 transition-colors" data-col="3" data-pos="1"></button>
+                                    <button class="dot-button w-6 h-6 rounded-full bg-gray-300 hover:bg-gray-400 transition-colors" data-col="3" data-pos="2"></button>
+                                    <button class="dot-button w-6 h-6 rounded-full bg-gray-300 hover:bg-gray-400 transition-colors" data-col="3" data-pos="3"></button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-4 flex flex-col sm:flex-row gap-4">
+                            <div class="flex-1">
+                                <label for="dotPatternInput" class="block text-sm font-medium text-gray-700 mb-2">Or Enter Pattern Manually</label>
+                                <input type="text" id="dotPatternInput" placeholder="e.g., ○○○○ ○○●● ●●●●" 
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-crypto-blue focus:border-transparent font-mono">
+                                <p class="text-xs text-gray-500 mt-1">Use ● for filled dots and ○ for empty dots. Spaces are optional.</p>
+                            </div>
+                            <div class="flex items-center">
+                                <button id="clearPattern" class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors">
+                                    Clear
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Reverse Search Result -->
+                    <div id="reverseSearchResult" class="hidden mt-6 p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
+                        <h3 class="font-semibold text-green-800 mb-2">Found Match:</h3>
+                        <div id="matchedWord" class="text-lg font-bold text-green-900"></div>
+                        <div id="matchedIndex" class="text-sm text-green-700"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Examples Section -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">Examples</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg">
+                    <h3 class="font-semibold text-gray-800 mb-2">#63 amazing = 32, 16, 8, 4, 2, 1</h3>
+                    <div class="flex space-x-1">
+                        <div class="flex space-x-1 bg-white p-2 rounded">
+                            <span class="w-4 h-4 rounded-full bg-gray-300"></span>
+                            <span class="w-4 h-4 rounded-full bg-gray-300"></span>
+                            <span class="w-4 h-4 rounded-full bg-gray-300"></span>
+                            <span class="w-4 h-4 rounded-full bg-gray-300"></span>
+                        </div>
+                        <div class="flex space-x-1 bg-white p-2 rounded">
+                            <span class="w-4 h-4 rounded-full bg-gray-300"></span>
+                            <span class="w-4 h-4 rounded-full bg-gray-300"></span>
+                            <span class="w-4 h-4 rounded-full bg-gray-800"></span>
+                            <span class="w-4 h-4 rounded-full bg-gray-800"></span>
+                        </div>
+                        <div class="flex space-x-1 bg-white p-2 rounded">
+                            <span class="w-4 h-4 rounded-full bg-gray-800"></span>
+                            <span class="w-4 h-4 rounded-full bg-gray-800"></span>
+                            <span class="w-4 h-4 rounded-full bg-gray-800"></span>
+                            <span class="w-4 h-4 rounded-full bg-gray-800"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gradient-to-r from-purple-50 to-pink-50 p-4 rounded-lg">
+                    <h3 class="font-semibold text-gray-800 mb-2">#977 key = 512 + 256 + 128 + 64 + 16 + 1</h3>
+                    <div class="flex space-x-1">
+                        <div class="flex space-x-1 bg-white p-2 rounded">
+                            <span class="w-4 h-4 rounded-full bg-gray-300"></span>
+                            <span class="w-4 h-4 rounded-full bg-gray-300"></span>
+                            <span class="w-4 h-4 rounded-full bg-gray-800"></span>
+                            <span class="w-4 h-4 rounded-full bg-gray-800"></span>
+                        </div>
+                        <div class="flex space-x-1 bg-white p-2 rounded">
+                            <span class="w-4 h-4 rounded-full bg-gray-800"></span>
+                            <span class="w-4 h-4 rounded-full bg-gray-800"></span>
+                            <span class="w-4 h-4 rounded-full bg-gray-300"></span>
+                            <span class="w-4 h-4 rounded-full bg-gray-800"></span>
+                        </div>
+                        <div class="flex space-x-1 bg-white p-2 rounded">
+                            <span class="w-4 h-4 rounded-full bg-gray-300"></span>
+                            <span class="w-4 h-4 rounded-full bg-gray-300"></span>
+                            <span class="w-4 h-4 rounded-full bg-gray-300"></span>
+                            <span class="w-4 h-4 rounded-full bg-gray-800"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Word Table -->
+        <div class="bg-white rounded-lg shadow-md overflow-hidden">
+            <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                <h2 class="text-xl font-semibold text-gray-900">BIP39 Word List</h2>
+                <p class="text-sm text-gray-600 mt-1">All 2048 words with their dot patterns</p>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200" id="wordTable">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Index</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Word</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Column 1</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Column 2</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Column 3</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200" id="tableBody">
+                        <!-- Table content will be populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Print-only content -->
+    <div id="printContent" class="print-only">
+        <!-- Content will be generated by JavaScript -->
+    </div>
+
+    <script src="bip39-data.js"></script>
+    <script>
+        // Current dot pattern state for reverse search
+        let currentDotPattern = {
+            col1: '○○○○',
+            col2: '○○○○',
+            col3: '○○○○'
+        };
+
+        function createDotPattern(pattern) {
+            return pattern.split('').map(dot => {
+                const dotClass = dot === '●' ? 'bg-gray-800' : 'bg-gray-300';
+                return `<span class="inline-block w-3 h-3 rounded-full ${dotClass} mr-1"></span>`;
+            }).join('');
+        }
+
+        function renderTable(words = bip39Words) {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = words.map(word => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${word.index}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-crypto-blue">${word.word}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" data-print-text="${word.col1}">
+                        <div class="flex items-center space-x-1 bg-gray-50 p-2 rounded">
+                            ${createDotPattern(word.col1)}
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" data-print-text="${word.col2}">
+                        <div class="flex items-center space-x-1 bg-gray-50 p-2 rounded">
+                            ${createDotPattern(word.col2)}
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" data-print-text="${word.col3}">
+                        <div class="flex items-center space-x-1 bg-gray-50 p-2 rounded">
+                            ${createDotPattern(word.col3)}
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function filterWords() {
+            const searchTerm = document.getElementById('search').value.toLowerCase();
+            const indexFilter = document.getElementById('indexFilter').value;
+            
+            let filteredWords = bip39Words.filter(word => 
+                word.word.toLowerCase().includes(searchTerm)
+            );
+
+            if (indexFilter) {
+                const [start, end] = indexFilter.split('-').map(Number);
+                filteredWords = filteredWords.filter(word => 
+                    word.index >= start && word.index <= end
+                );
+            }
+
+            renderTable(filteredWords);
+        }
+
+        // Reverse search functions
+        function dotPatternToBinary(pattern) {
+            return pattern.split('').map(dot => dot === '●' ? '1' : '0').join('');
+        }
+
+        function binaryToIndex(binaryString) {
+            return parseInt(binaryString, 2);
+        }
+
+        function findWordByDotPattern(col1, col2, col3) {
+            // Normalize patterns (remove spaces and ensure correct length)
+            col1 = col1.replace(/\s/g, '').padEnd(4, '○').substring(0, 4);
+            col2 = col2.replace(/\s/g, '').padEnd(4, '○').substring(0, 4);
+            col3 = col3.replace(/\s/g, '').padEnd(4, '○').substring(0, 4);
+
+            // Convert to binary for exact match
+            const binary1 = dotPatternToBinary(col1);
+            const binary2 = dotPatternToBinary(col2);
+            const binary3 = dotPatternToBinary(col3);
+            
+            // Combine into 12-bit binary
+            const fullBinary = binary1 + binary2 + binary3;
+            
+            // Convert to index
+            const index = binaryToIndex(fullBinary);
+            
+            // Find the exact word match
+            return bip39Words.find(word => word.index === index);
+        }
+
+        function matchesPattern(wordPattern, searchPattern) {
+            // A word matches the search pattern if:
+            // - Where search pattern has ●, word must also have ●
+            // - Where search pattern has ○, word can have either ● or ○
+            for (let i = 0; i < 4; i++) {
+                if (searchPattern[i] === '●' && wordPattern[i] !== '●') {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        function updateDotBuilder() {
+            // Update visual dot builder based on current pattern
+            for (let col = 1; col <= 3; col++) {
+                const pattern = currentDotPattern[`col${col}`];
+                const buttons = document.querySelectorAll(`[data-col="${col}"]`);
+                
+                buttons.forEach((button, index) => {
+                    const isFilled = pattern[index] === '●';
+                    button.className = `dot-button w-6 h-6 rounded-full transition-colors ${
+                        isFilled ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-300 hover:bg-gray-400'
+                    }`;
+                });
+            }
+            
+            // Update manual input field
+            const manualInput = document.getElementById('dotPatternInput');
+            manualInput.value = `${currentDotPattern.col1} ${currentDotPattern.col2} ${currentDotPattern.col3}`;
+            
+            // Perform reverse search
+            performReverseSearch();
+        }
+
+        function performReverseSearch() {
+            const result = findWordByDotPattern(
+                currentDotPattern.col1,
+                currentDotPattern.col2,
+                currentDotPattern.col3
+            );
+            
+            const resultDiv = document.getElementById('reverseSearchResult');
+            const matchedWord = document.getElementById('matchedWord');
+            const matchedIndex = document.getElementById('matchedIndex');
+            
+            if (result) {
+                matchedWord.textContent = result.word;
+                matchedIndex.textContent = `Index: ${result.index}`;
+                resultDiv.classList.remove('hidden');
+                
+                // Show the exact match in the table
+                renderTable([result]);
+            } else {
+                resultDiv.classList.add('hidden');
+                // Show empty table if no match found
+                renderTable([]);
+            }
+        }
+
+        function parseDotPatternInput(input) {
+            // Clean and parse manual input
+            const cleaned = input.replace(/\s+/g, ' ').trim();
+            const parts = cleaned.split(' ');
+            
+            if (parts.length >= 3) {
+                return {
+                    col1: parts[0].padEnd(4, '○').substring(0, 4),
+                    col2: parts[1].padEnd(4, '○').substring(0, 4),
+                    col3: parts[2].padEnd(4, '○').substring(0, 4)
+                };
+            } else if (parts.length === 1 && parts[0].length >= 12) {
+                // Single string of 12 characters
+                const fullPattern = parts[0];
+                return {
+                    col1: fullPattern.substring(0, 4),
+                    col2: fullPattern.substring(4, 8),
+                    col3: fullPattern.substring(8, 12)
+                };
+            }
+            
+            return null;
+        }
+
+        function clearDotPattern() {
+            currentDotPattern = {
+                col1: '○○○○',
+                col2: '○○○○',
+                col3: '○○○○'
+            };
+            updateDotBuilder();
+        }
+
+        function switchSearchMode(mode) {
+            const wordPanel = document.getElementById('wordSearchPanel');
+            const dotPanel = document.getElementById('dotSearchPanel');
+            const wordButton = document.getElementById('wordSearchMode');
+            const dotButton = document.getElementById('dotSearchMode');
+            
+            if (mode === 'word') {
+                wordPanel.classList.remove('hidden');
+                dotPanel.classList.add('hidden');
+                wordButton.className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors bg-crypto-blue text-white';
+                dotButton.className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors text-gray-600 hover:text-gray-900';
+                
+                // Reset to show all words
+                renderTable();
+            } else {
+                wordPanel.classList.add('hidden');
+                dotPanel.classList.remove('hidden');
+                wordButton.className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors text-gray-600 hover:text-gray-900';
+                dotButton.className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors bg-crypto-blue text-white';
+                
+                // Initialize dot pattern builder
+                updateDotBuilder();
+            }
+        }
+
+        // Event listeners
+        document.getElementById('search').addEventListener('input', filterWords);
+        document.getElementById('indexFilter').addEventListener('change', filterWords);
+
+        // Search mode toggle
+        document.getElementById('wordSearchMode').addEventListener('click', () => switchSearchMode('word'));
+        document.getElementById('dotSearchMode').addEventListener('click', () => switchSearchMode('dot'));
+
+        // Dot builder buttons
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('dot-button')) {
+                const col = e.target.dataset.col;
+                const pos = parseInt(e.target.dataset.pos);
+                
+                // Toggle dot state
+                const currentPattern = currentDotPattern[`col${col}`];
+                const newPattern = currentPattern.split('');
+                newPattern[pos] = newPattern[pos] === '●' ? '○' : '●';
+                currentDotPattern[`col${col}`] = newPattern.join('');
+                
+                updateDotBuilder();
+            }
+        });
+
+        // Manual input field
+        document.getElementById('dotPatternInput').addEventListener('input', (e) => {
+            const parsed = parseDotPatternInput(e.target.value);
+            if (parsed) {
+                currentDotPattern = parsed;
+                updateDotBuilder();
+            }
+        });
+
+        // Clear button
+        document.getElementById('clearPattern').addEventListener('click', clearDotPattern);
+
+        // Generate print content
+        function generatePrintContent() {
+            const printContent = document.getElementById('printContent');
+            let tableHTML = '<table id="printTable">';
+            
+            // Create rows with 7 columns each
+            for (let i = 0; i < bip39Words.length; i += 7) {
+                tableHTML += '<tr>';
+                for (let j = 0; j < 7; j++) {
+                    const wordIndex = i + j;
+                    if (wordIndex < bip39Words.length) {
+                        const word = bip39Words[wordIndex];
+                        tableHTML += `<td>${word.index} ${word.word} ${word.col1}${word.col2}${word.col3}</td>`;
+                    } else {
+                        tableHTML += '<td></td>'; // Empty cell for incomplete rows
+                    }
+                }
+                tableHTML += '</tr>';
+            }
+            
+            tableHTML += '</table>';
+            printContent.innerHTML = tableHTML;
+        }
+
+        // Initial render
+        renderTable();
+        generatePrintContent();
+    </script>
+</body>
+</html>
